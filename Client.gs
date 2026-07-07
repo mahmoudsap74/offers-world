@@ -16,7 +16,6 @@ const CONFIG = {
 };
 
 // ✅ قراءة كلمة المرور من إعدادات السكربت (PropertiesService) للحماية
-// يجب إضافتها من خلال: Project Settings -> Script Properties -> ADMIN_PASSWORD
 const ADMIN_PASSWORD = PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD') || '01225949346';
 
 // ============================================================
@@ -69,8 +68,9 @@ function doGet(e) {
     return respond(getTrackerLogs(e.parameter));
   }
 
+  // ✅ FIX: تمرير all + month + year بدلاً من period
   if (action === 'trackerSummary') {
-    return respond(getTrackerSummary(e.parameter.period, e.parameter.month, e.parameter.year));
+    return respond(getTrackerSummary(e.parameter.all, e.parameter.month, e.parameter.year));
   }
 
   return respond({ status: 'ok', system: CONFIG.SYSTEM_NAME });
@@ -82,8 +82,7 @@ function doGet(e) {
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
-    // 🔒 منع التزامن (Race condition) عن طريق قفل السكربت لمدة تصل لـ 10 ثوانٍ
-    lock.waitLock(10000); 
+    lock.waitLock(10000);
     
     var data = JSON.parse(e.postData.contents);
     var action = data.action;
@@ -121,7 +120,7 @@ function doPost(e) {
     }
 
     if (action === 'deleteTrackerLog') {
-      return respond(deleteTrackerLog(data)); // نمرر الكائن كاملاً ليصل rowId
+      return respond(deleteTrackerLog(data));
     }
 
     if (action === 'checkTrackerPass') {
@@ -134,7 +133,6 @@ function doPost(e) {
     logError('doPost', err.toString());
     return respond({ success: false, error: err.toString() });
   } finally {
-    // 🔓 تحرير القفل ليسمح للطلبات الأخرى بالمرور
     lock.releaseLock();
   }
 }
@@ -188,7 +186,6 @@ function getPackages(company) {
 function handleNewOrder(data) {
   var orderId = data.orderId || generateOrderId();
 
-  // 🛡️ منع التكرار: لو الـ orderId موجود مسبقًا → ارجع بنجاح بدون حفظ تاني
   try {
     var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     var sheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
@@ -196,7 +193,7 @@ function handleNewOrder(data) {
     if (existing) {
       return { success: true, orderId: orderId, duplicate: true };
     }
-  } catch (e) { /* استمر في حالة خطأ في الفحص */ }
+  } catch (e) { }
 
   var proofUrl = '';
   if (data.proofBase64) {
@@ -204,21 +201,21 @@ function handleNewOrder(data) {
   }
 
   var row = [
-    orderId,                        // A[0]:  رقم الطلب
-    formatDate(new Date()),         // B[1]:  التاريخ
-    data.customerName  || '',       // C[2]:  اسم العميل
-    data.phone         || '',       // D[3]:  رقم الواتساب
-    data.company       || '',       // E[4]:  الشركة
-    data.package       || '',       // F[5]:  الباقة
-    data.price         || 0,        // G[6]:  السعر
-    data.transferRef   || '',       // H[7]:  رقم التحويل
-    data.payment       || '',       // I[8]:  طريقة الدفع
-    'معلق',                         // J[9]:  الحالة
-    '',                             // K[10]: تاريخ التفعيل
-    data.notes         || '',       // L[11]: ملاحظات
-    proofUrl,                       // M[12]: إيصال الدفع
-    data.activationPhone || '',     // N[13]: ✅ رقم التفعيل
-    data.vodafonePassword || ''     // O[14]: 🔑 باسورد أنا فودافون (فودافون فقط)
+    orderId,
+    formatDate(new Date()),
+    data.customerName  || '',
+    data.phone         || '',
+    data.company       || '',
+    data.package       || '',
+    data.price         || 0,
+    data.transferRef   || '',
+    data.payment       || '',
+    'معلق',
+    '',
+    data.notes         || '',
+    proofUrl,
+    data.activationPhone || '',
+    data.vodafonePassword || ''
   ];
 
   saveOrder(row);
@@ -252,7 +249,7 @@ function getAllOrders() {
       notes:            data[i][11],
       proofImage:       data[i][12],
       activationPhone:  data[i][13] || '',
-      vodafonePassword: data[i][14] || ''   // 🔑 باسورد أنا فودافون
+      vodafonePassword: data[i][14] || ''
     });
   }
   return result;
@@ -263,13 +260,12 @@ function updateOrderStatus(orderId, newStatus, note) {
     var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     var sheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
     
-    // ⚡ تسريع البحث باستخدام TextFinder بدلاً من الـ for loop
     var findResult = sheet.getRange("A:A").createTextFinder(String(orderId).trim()).matchEntireCell(true).findNext();
     if (!findResult) return { success: false, message: 'الطلب غير موجود' };
     
     var rowIndex = findResult.getRow();
 
-    sheet.getRange(rowIndex, 10).setValue(newStatus);   // col J = status
+    sheet.getRange(rowIndex, 10).setValue(newStatus);
 
     if (newStatus === 'تم التفعيل') {
       var currentActivation = sheet.getRange(rowIndex, 11).getValue();
@@ -321,7 +317,6 @@ function updatePackage(pkg) {
     var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     var sheet = ss.getSheetByName(CONFIG.SHEETS.PACKAGES);
     
-    // ⚡ تسريع البحث باستخدام TextFinder
     var findResult = sheet.getRange("A:A").createTextFinder(String(pkg.packageId).trim()).matchEntireCell(true).findNext();
     if (!findResult) return { success: false, message: 'الباقة غير موجودة' };
     
@@ -345,7 +340,6 @@ function deletePackage(packageId) {
     var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     var sheet = ss.getSheetByName(CONFIG.SHEETS.PACKAGES);
     
-    // ⚡ تسريع البحث باستخدام TextFinder
     var findResult = sheet.getRange("A:A").createTextFinder(String(packageId).trim()).matchEntireCell(true).findNext();
     if (!findResult) return { success: false, message: 'الباقة غير موجودة' };
     
@@ -461,7 +455,7 @@ function logError(fn, msg) {
 }
 
 // ============================================================
-// ✅ FIX: إرسال الإيميل — إصلاح الـ HTML المكسور (<td><td>)
+// ✅ FIX: إرسال الإيميل
 // ============================================================
 function sendAdminNotification(orderId, data, proofImageUrl) {
   var subject = '[عالم العروض] طلب جديد - ' + orderId;

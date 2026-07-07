@@ -603,6 +603,75 @@
 
         .input-select:focus { outline: none; border-color: var(--accent); }
         .input-select option { background: var(--card2); }
+
+        /* فلتر المؤشرات */
+        .filter-bar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: var(--card2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 12px 14px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-bar label {
+            font-size: 0.82rem;
+            color: var(--muted);
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .filter-select {
+            flex: 1;
+            min-width: 100px;
+            padding: 8px 12px;
+            background: var(--card3);
+            border: 1px solid #2a2a45;
+            border-radius: 10px;
+            color: white;
+            font-family: 'Cairo', sans-serif;
+            font-size: 0.9rem;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .filter-select:focus { outline: none; border-color: var(--accent); }
+
+        .btn-filter-all {
+            padding: 8px 14px;
+            background: rgba(139, 60, 247, 0.18);
+            border: 1px solid rgba(139, 60, 247, 0.4);
+            border-radius: 10px;
+            color: var(--accent2);
+            font-family: 'Cairo', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: var(--transition);
+        }
+
+        .btn-filter-all.active,
+        .btn-filter-all:hover {
+            background: rgba(139, 60, 247, 0.35);
+        }
+
+        .filter-refresh {
+            padding: 8px 12px;
+            background: var(--card3);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            font-family: 'Cairo', sans-serif;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .filter-refresh:hover { border-color: var(--accent); color: var(--accent2); }
     </style>
 </head>
 
@@ -686,7 +755,20 @@
 
         <!-- Tab 3: ملخص الشهر والمؤشرات (كشف العجز/القوة) -->
         <div id="tab-month" class="tab-content">
-            <h3 style="margin-bottom: 15px;">المؤشرات العامة (الشهر الحالي)</h3>
+            <h3 style="margin-bottom: 15px;">المؤشرات العامة</h3>
+
+            <!-- فلتر الفترة الزمنية -->
+            <div class="filter-bar">
+                <label>⏱ الفترة:</label>
+                <select id="filterMonth" class="filter-select" onchange="onFilterChange()">
+                    <!-- تُملأ برمجياً -->
+                </select>
+                <select id="filterYear" class="filter-select" onchange="onFilterChange()">
+                    <!-- تُملأ برمجياً -->
+                </select>
+                <button id="btnFilterAll" class="btn-filter-all active" onclick="setFilterAll()">كل البيانات</button>
+                <button class="filter-refresh" onclick="loadSummary()" title="تحديث">🔄</button>
+            </div>
 
             <div class="stats-grid">
                 <div class="stat-card">
@@ -812,7 +894,7 @@
 
     <script>
         // CONFIG MUST MATCH Client.gs doGet URL
-        const API_URL = 'https://script.google.com/macros/s/AKfycbzB57Mux7NY6mZP_AOAJesK9GnVhCi669LNlIs3CYltnzJpDM4eT9ZQeA49EqLROrQQ/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbxXTyjt-5zPeYA3QvCJFV_dLf7Jn2bx_gC4rj1QUzGhKnx9QgYv7MykeLG5gPkGoxho/exec';
 
         let ALL_PACKAGES = {};
         let SELECTED_DATA = {
@@ -830,8 +912,51 @@
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
             el.classList.add('active');
 
-            if (tabId === 'today' || tabId === 'month') loadSummary();
+            if (tabId === 'today') loadSummary();
+            if (tabId === 'month') loadSummary();
             if (tabId === 'history') loadLogs();
+        }
+
+        // --- فلتر المؤشرات ---
+        let filterAllData = true; // وضع «كل البيانات» افتراضي
+
+        function buildFilterSelects() {
+            const monthSel = document.getElementById('filterMonth');
+            const yearSel  = document.getElementById('filterYear');
+
+            const monthNames = [
+                'يناير','فبراير','مارس','أبريل','مايو','يونيو',
+                'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'
+            ];
+            monthSel.innerHTML = monthNames.map((m, i) =>
+                `<option value="${i + 1}">${m}</option>`
+            ).join('');
+
+            const currentYear = new Date().getFullYear();
+            yearSel.innerHTML = '';
+            for (let y = currentYear; y >= currentYear - 3; y--) {
+                yearSel.innerHTML += `<option value="${y}">${y}</option>`;
+            }
+
+            // اختر الشهر والسنة الحاليين افتراضياً
+            monthSel.value = new Date().getMonth() + 1;
+            yearSel.value  = currentYear;
+        }
+
+        function setFilterAll() {
+            filterAllData = true;
+            document.getElementById('btnFilterAll').classList.add('active');
+            document.getElementById('filterMonth').disabled = true;
+            document.getElementById('filterYear').disabled  = true;
+            loadSummary();
+        }
+
+        function onFilterChange() {
+            filterAllData = false;
+            document.getElementById('btnFilterAll').classList.remove('active');
+            document.getElementById('filterMonth').disabled = false;
+            document.getElementById('filterYear').disabled  = false;
+            loadSummary();
         }
 
         // --- تحديد أزرار Options ---
@@ -1010,28 +1135,60 @@
         // --- تحميل الملخص ---
         async function loadSummary() {
             try {
-                const res = await fetch(`${API_URL}?action=trackerSummary`);
+                // بناء رابط الـ API مع الفلتر
+                let url = `${API_URL}?action=trackerSummary`;
+                if (!filterAllData) {
+                    const m = document.getElementById('filterMonth').value;
+                    const y = document.getElementById('filterYear').value;
+                    url += `&month=${m}&year=${y}`;
+                }
+                // all=1 يخبر الـ Backend بإرجاع كل البيانات بدون فلتر شهر
+                if (filterAllData) url += '&all=1';
+
+                const res  = await fetch(url);
                 const json = await res.json();
 
                 if (json.success) {
-                    // بيانات اليوم
+                    // بيانات اليوم (دائماً تُعرض)
                     document.getElementById('todayCount').innerText = json.today.count;
-                    document.getElementById('todayRev').innerText = json.today.revenue;
+                    document.getElementById('todayRev').innerText   = json.today.revenue;
                     renderTodayCompanies(json.today.byCompany);
 
-                    // بيانات الشهر
-                    document.getElementById('monthCount').innerText = json.monthly.count;
-                    document.getElementById('monthRev').innerText = json.monthly.revenue;
+                    // بيانات الفترة المختارة
+                    const period = json.filtered || json.monthly; // يدعم القديم والجديد
+                    document.getElementById('monthCount').innerText = period.count;
+                    document.getElementById('monthRev').innerText   = period.revenue;
 
                     document.getElementById('topCompany').innerText =
-                        json.monthly.topCompany.name ? `${json.monthly.topCompany.name} (${json.monthly.topCompany.count} عملية)` : '-';
+                        period.topCompany && period.topCompany.name
+                            ? `${period.topCompany.name} (${period.topCompany.count} عملية)` : '-';
                     document.getElementById('bottomCompany').innerText =
-                        json.monthly.bottomCompany.name ? `${json.monthly.bottomCompany.name} (${json.monthly.bottomCompany.count} عملية)` : '-';
+                        period.bottomCompany && period.bottomCompany.name
+                            ? `${period.bottomCompany.name} (${period.bottomCompany.count} عملية)` : '-';
 
-                    initCharts(json.monthly.bySource, json.monthly.byCompany);
+                    initCharts(period.bySource, period.byCompany);
+
+                    // تحديث عنوان الشاشة
+                    updatePeriodLabel();
                 }
             } catch (err) {
                 console.error(err);
+            }
+        }
+
+        function updatePeriodLabel() {
+            const monthNames = [
+                'يناير','فبراير','مارس','أبريل','مايو','يونيو',
+                'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'
+            ];
+            const h3 = document.querySelector('#tab-month h3');
+            if (!h3) return;
+            if (filterAllData) {
+                h3.textContent = 'المؤشرات العامة — كل البيانات';
+            } else {
+                const m = parseInt(document.getElementById('filterMonth').value) - 1;
+                const y = document.getElementById('filterYear').value;
+                h3.textContent = `المؤشرات العامة — ${monthNames[m]} ${y}`;
             }
         }
 
@@ -1328,6 +1485,8 @@
             });
         }
         window.addEventListener('DOMContentLoaded', () => {
+            buildFilterSelects();      // بناء قوائم الفلتر
+            setFilterAll();            // وضع «كل البيانات» افتراضي
             loadPackagesMaster();
             loadSummary();
         });
